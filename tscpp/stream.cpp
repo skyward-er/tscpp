@@ -26,6 +26,7 @@
  ***************************************************************************/
 
 #include "stream.h"
+
 #include <memory>
 #if defined(__GNUC__) && !defined(_MIOSIX)
 #include <cxxabi.h>
@@ -33,75 +34,83 @@
 
 using namespace std;
 
-namespace tscpp {
-
-void TypePoolStream::unserializeUnknownImpl(const string& name, istream& is, streampos pos) const
+namespace tscpp
 {
-    auto it=types.find(name);
-    if(it==types.end())
+
+void TypePoolStream::unserializeUnknownImpl(const string& name, istream& is,
+                                            streampos pos) const
+{
+    auto it = types.find(name);
+    if (it == types.end())
     {
         is.seekg(pos);
-        throw TscppException("unknown type",name);
+        throw TscppException("unknown type", name);
     }
 
     it->second(is);
 }
 
-void OutputArchive::serializeImpl(const char *name, const void *data, int size)
+void OutputArchive::serializeImpl(const char* name, const void* data, int size)
 {
-    int nameSize=strlen(name);
-    os.write(name,nameSize+1);
-    os.write(reinterpret_cast<const char*>(data),size);
+    int nameSize = strlen(name);
+    os.write(name, nameSize + 1);
+    os.write(reinterpret_cast<const char*>(data), size);
 }
 
-void InputArchive::unserializeImpl(const char *name, void *data, int size)
+void InputArchive::unserializeImpl(const char* name, void* data, int size)
 {
-    auto pos=is.tellg();
-    int nameSize=strlen(name);
-    unique_ptr<char[]> unserializedName(new char[nameSize+1]);
-    is.read(unserializedName.get(),nameSize+1);
-    if(is.eof()) throw TscppException("eof");
+    auto pos     = is.tellg();
+    int nameSize = strlen(name);
+    unique_ptr<char[]> unserializedName(new char[nameSize + 1]);
+    is.read(unserializedName.get(), nameSize + 1);
+    if (is.eof())
+        throw TscppException("eof");
 
-    if(memcmp(unserializedName.get(),name,nameSize+1)) wrongType(pos);
+    if (memcmp(unserializedName.get(), name, nameSize + 1))
+        wrongType(pos);
 
-    //NOTE: we are writing on top of a constructed type without calling its
-    //destructor. However, since it is trivially copyable, we at least aren't
-    //overwriting pointers to allocated memory.
-    is.read(reinterpret_cast<char*>(data),size);
-    if(is.eof()) throw TscppException("eof");
+    // NOTE: We are writing on top of a constructed type without calling its
+    // destructor. However, since it is trivially copyable, we at least aren't
+    // overwriting pointers to allocated memory.
+    is.read(reinterpret_cast<char*>(data), size);
+    if (is.eof())
+        throw TscppException("eof");
 }
 
 void InputArchive::wrongType(streampos pos)
 {
     is.seekg(pos);
     string name;
-    getline(is,name,'\0');
+    getline(is, name, '\0');
     is.seekg(pos);
-    throw TscppException("wrong type",name);
+    throw TscppException("wrong type", name);
 }
 
 void UnknownInputArchive::unserialize()
 {
-    auto pos=is.tellg();
+    auto pos = is.tellg();
     string name;
-    getline(is,name,'\0');
-    if(is.eof()) throw TscppException("eof");
+    getline(is, name, '\0');
+    if (is.eof())
+        throw TscppException("eof");
 
-    tp.unserializeUnknownImpl(name,is,pos);
+    tp.unserializeUnknownImpl(name, is, pos);
 }
 
 string demangle(const string& name)
 {
-    #if defined(__GNUC__) && !defined(_MIOSIX)
-    string result=name;
+#if defined(__GNUC__) && !defined(_MIOSIX)
+    string result = name;
     int status;
-    char* demangled=abi::__cxa_demangle(name.c_str(),NULL,0,&status);
-    if(status==0 && demangled) result=demangled;
-    if(demangled) free(demangled);
+    char* demangled = abi::__cxa_demangle(name.c_str(), NULL, 0, &status);
+    if (status == 0 && demangled)
+        result = demangled;
+    if (demangled)
+        free(demangled);
     return result;
-    #else
-    return name; //Demangle not supported
-    #endif
+#else
+    return name;  // Demangle not supported
+#endif
 }
 
-} //namespace tscpp
+}  // namespace tscpp

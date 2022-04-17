@@ -29,67 +29,80 @@
 
 using namespace std;
 
-namespace tscpp {
-
-int TypePoolBuffer::unserializeUnknownImpl(const char *name, const void *buffer, int bufSize) const
+namespace tscpp
 {
-    auto it=types.find(name);
-    if(it==types.end()) return UnknownType;
 
-    if(it->second.size>bufSize) return BufferTooSmall;
+int TypePoolBuffer::unserializeUnknownImpl(const char *name, const void *buffer,
+                                           int bufSize) const
+{
+    auto it = types.find(name);
+    if (it == types.end())
+        return UnknownType;
+
+    if (it->second.size > bufSize)
+        return BufferTooSmall;
 
     it->second.usc(buffer);
     return it->second.size;
 }
 
-int serializeImpl(void *buffer, int bufSize, const char *name, const void *data, int size)
+int serializeImpl(void *buffer, int bufSize, const char *name, const void *data,
+                  int size)
 {
-    int nameSize=strlen(name);
-    int serializedSize=nameSize+1+size;
-    if(serializedSize>bufSize) return BufferTooSmall;
+    int nameSize       = strlen(name);
+    int serializedSize = nameSize + 1 + size;
+    if (serializedSize > bufSize)
+        return BufferTooSmall;
 
-    char *buf=reinterpret_cast<char*>(buffer);
-    memcpy(buf,name,nameSize+1); //Copy also the \0
-    memcpy(buf+nameSize+1,data,size);
+    char *buf = reinterpret_cast<char *>(buffer);
+    memcpy(buf, name, nameSize + 1);  // Copy also the \0
+    memcpy(buf + nameSize + 1, data, size);
     return serializedSize;
 }
 
-int unserializeImpl(const char *name, void *data, int size, const void *buffer, int bufSize)
+int unserializeImpl(const char *name, void *data, int size, const void *buffer,
+                    int bufSize)
 {
-    int nameSize=strlen(name);
-    int serializedSize=nameSize+1+size;
-    if(serializedSize>bufSize) return BufferTooSmall;
+    int nameSize       = strlen(name);
+    int serializedSize = nameSize + 1 + size;
+    if (serializedSize > bufSize)
+        return BufferTooSmall;
 
-    const char *buf=reinterpret_cast<const char*>(buffer);
-    if(memcmp(buf,name,nameSize+1)) return WrongType;
+    const char *buf = reinterpret_cast<const char *>(buffer);
+    if (memcmp(buf, name, nameSize + 1))
+        return WrongType;
 
-    //NOTE: we are writing on top of a constructed type without calling its
-    //destructor. However, since it is trivially copyable, we at least aren't
-    //overwriting pointers to allocated memory.
-    memcpy(data,buf+nameSize+1,size);
+    // NOTE: we are writing on top of a constructed type without calling its
+    // destructor. However, since it is trivially copyable, we at least aren't
+    // overwriting pointers to allocated memory.
+    memcpy(data, buf + nameSize + 1, size);
     return serializedSize;
 }
 
-int unserializeUnknown(const TypePoolBuffer& tp, const void *buffer, int bufSize)
+int unserializeUnknown(const TypePoolBuffer &tp, const void *buffer,
+                       int bufSize)
 {
-    const char *buf=reinterpret_cast<const char*>(buffer);
-    int nameSize=strnlen(buf,bufSize);
-    if(nameSize>=bufSize) return BufferTooSmall;
+    const char *buf = reinterpret_cast<const char *>(buffer);
+    int nameSize    = strnlen(buf, bufSize);
+    if (nameSize >= bufSize)
+        return BufferTooSmall;
 
-    const char *name=buf;
-    buf+=nameSize+1;
-    bufSize-=nameSize+1;
-    auto result=tp.unserializeUnknownImpl(name,buf,bufSize);
-    if(result<0) return result;
-    return result+nameSize+1;
+    const char *name = buf;
+    buf += nameSize + 1;
+    bufSize -= nameSize + 1;
+    auto result = tp.unserializeUnknownImpl(name, buf, bufSize);
+    if (result < 0)
+        return result;
+    return result + nameSize + 1;
 }
 
 string peekTypeName(const void *buffer, int bufSize)
 {
-    const char *buf=reinterpret_cast<const char*>(buffer);
-    int nameSize=strnlen(buf,bufSize);
-    if(nameSize>=bufSize) return "";
+    const char *buf = reinterpret_cast<const char *>(buffer);
+    int nameSize    = strnlen(buf, bufSize);
+    if (nameSize >= bufSize)
+        return "";
     return buf;
 }
 
-} //namespace tscpp
+}  // namespace tscpp

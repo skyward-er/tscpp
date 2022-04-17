@@ -27,63 +27,67 @@
 
 /**
  * \file stream.h
- * TSCPP stream API. This file contains classes to serialize types to std
+ *
+ * @brief TSCPP stream API.
+ *
+ * This file contains classes to serialize types to std
  * streams. These classes provide a high level API compatible with the C++ stl.
  * Error reporting is performed through exceptions.
- * 
- * NOTE: the serialization format between the buffer and stream API is
+ *
+ * NOTE: The serialization format between the buffer and stream API is
  * interchangeable, so you can for example serialize using the buffer API and
  * unserialize using the stream API.
  */
 
 #pragma once
 
-#include <type_traits>
-#include <functional>
-#include <stdexcept>
-#include <ostream>
-#include <istream>
 #include <cstring>
-#include <string>
+#include <functional>
+#include <istream>
 #include <map>
+#include <ostream>
+#include <stdexcept>
+#include <string>
+#include <type_traits>
 
-namespace tscpp {
+namespace tscpp
+{
 
 /**
- * Exception class thrown by the input archives
+ * Exception class thrown by the input archives.
  */
 class TscppException : public std::runtime_error
 {
 public:
-    /**
-     * \internal
-     */
     TscppException(const std::string& what) : runtime_error(what) {}
-    
-    /**
-     * \internal
-     */
+
     TscppException(const std::string& what, const std::string& n)
-        : runtime_error(what), n(n) {}
-    
+        : runtime_error(what), n(n)
+    {
+    }
+
     /**
      * If the exception is thrown because an unknown/unexpected type has been
      * found in the input stream, this member function allows to access the
      * mangled type name.
-     * It is useful to print an error message with the name of the type in the
-     * stream
+     * It is useful to print an error message with the name of the type found in
+     * the stream.
+     *
      * \code
      * InputArchive ia(is);
      * Foo f;
      * try {
-     *     ia>>f;
+     *     ia >> f;
      * } catch(TscppException& ex) {
      *     if(ex.name().empty()==false)
-     *         cerr<<"While unserializing Foo, "<<demangle(ex.name())<<" was found\n";
-     *     else cerr<<ex.what()<<endl;
+     *         cerr << "While deserializing Foo, " << demangle(ex.name()) << "
+     * was found\n";
+     *     else
+     *         cerr << ex.what() << endl;
      * }
      * \endcode
-     * \return the serialized type name, or "" if eof was found
+     *
+     * \return The serialized type name or "" for other errors was found.
      */
     std::string name() const { return n; }
 
@@ -92,7 +96,8 @@ private:
 };
 
 /**
- * Type pool for the TSCPP stream API.
+ * @brief Type pool for the TSCPP stream API.
+ *
  * A type pool is a class where you can register types and associate callbacks
  * to them. It is used to unserialize types when you don't know the exact type
  * or order in which types have been serialized.
@@ -101,132 +106,154 @@ class TypePoolStream
 {
 public:
     /**
-     * Register a type and the associated callback
-     * \tparam T type to be registered
-     * \param callback callabck to be called whan the given type is unserialized
+     * @brief Register a type and the associated callback.
+     *
+     * The type to register must have a default constructor defined.
+     *
+     * \tparam T Type to be registered.
+     * \param callback Callback used when the given type is unserialized.
      */
-    template<typename T>
-    void registerType(std::function<void (T& t)> callback)
-    {
-        #ifndef _MIOSIX
-        static_assert(std::is_trivially_copyable<T>::value,"Type is not trivially copyable");
-        #endif
-        types[typeid(T).name()]=[=](std::istream& is) {
-            //NOTE: We copy the buffer to respect alignment requirements.
-            //The buffer may not be suitably aligned for the unserialized type
-            //TODO: support classes without default constructor
-            //NOTE: we are writing on top of a constructed type without calling its
-            //destructor. However, since it is trivially copyable, we at least aren't
-            //overwriting pointers to allocated memory.
-            T t;
-            is.read(reinterpret_cast<char*>(&t),sizeof(T));
-            if(is.eof()) throw TscppException("eof");
-            callback(t);
-        };
-    }
-    
-    /**
-     * \internal
-     */
-    void unserializeUnknownImpl(const std::string& name, std::istream& is, std::streampos pos) const;
-    
+    template <typename T>
+    void registerType(std::function<void(T& t)> callback);
+
+    void unserializeUnknownImpl(const std::string& name, std::istream& is,
+                                std::streampos pos) const;
+
 private:
-    std::map<std::string,std::function<void (std::istream&)>> types; ///< Registered types
+    ///< Registered types serialized name and callback function
+    std::map<std::string, std::function<void(std::istream&)>> types;
 };
 
+template <typename T>
+void TypePoolStream::registerType(std::function<void(T& t)> callback)
+{
+#ifndef _MIOSIX
+    static_assert(std::is_trivially_copyable<T>::value,
+                  "Type is not trivially copyable");
+#endif
+    types[typeid(T).name()] = [=](std::istream& is)
+    {
+        // NOTE: We copy the buffer to respect alignment requirements.
+        // The buffer may not be suitably aligned for the unserialized type
+        // TODO: support classes without default constructor
+        // NOTE: we are writing on top of a constructed type without calling
+        // its destructor. However, since it is trivially copyable, we at
+        // least aren't overwriting pointers to allocated memory.
+        T t;
+        is.read(reinterpret_cast<char*>(&t), sizeof(T));
+        if (is.eof())
+            throw TscppException("eof");
+        callback(t);
+    };
+}
+
 /**
- * The output archive.
- * This class allows to serialize objects to any ostream using the familiar
- * << syntax
+ * @brief The output archive.
+ *
+ * This class allows to serialize objects to any ostream using the << operator.
  */
 class OutputArchive
 {
 public:
     /**
-     * Constructor
-     * \param os ostream where srialized types will be written
+     * \param os Output stream where serialized types will be written.
      */
     OutputArchive(std::ostream& os) : os(os) {}
 
     /**
-     * \internal
+     * @brief Actual implementation of the serialization.
+     *
+     * Saves on the output stream the name followed by the data.
+     *
+     * @param name Type name saved before the data.
+     * @param data Type data
+     * @param size Size of the data
      */
-    void serializeImpl(const char *name, const void *data, int size);
+    void serializeImpl(const char* name, const void* data, int size);
 
 private:
-    OutputArchive(const OutputArchive&)=delete;
-    OutputArchive& operator=(const OutputArchive&)=delete;
+    OutputArchive(const OutputArchive&) = delete;
+    OutputArchive& operator=(const OutputArchive&) = delete;
 
     std::ostream& os;
 };
 
 /**
- * Serialize a type
- * \param oa archive where the type will be serialized
- * \param t type to serialize
+ * @brief Serialize a type.
+ *
+ * \param oa Archive where the type will be serialized.
+ * \param t Type to serialize.
  */
-template<typename T>
+template <typename T>
 OutputArchive& operator<<(OutputArchive& oa, const T& t)
 {
-    #ifndef _MIOSIX
-    static_assert(std::is_trivially_copyable<T>::value,"Type is not trivially copyable");
-    #endif
-    oa.serializeImpl(typeid(t).name(),&t,sizeof(t));
+#ifndef _MIOSIX
+    static_assert(std::is_trivially_copyable<T>::value,
+                  "Type is not trivially copyable");
+#endif
+    oa.serializeImpl(typeid(t).name(), &t, sizeof(t));
     return oa;
 }
 
 /**
- * The input archive.
+ * @brief The input archive.
+ *
  * This class allows to unserialize types from a stream, as long as you know
  * what types have been serialized in which order. Otherwise have a look at
  * UnknownInputArchive.
- * To unserialize, use the familiar >> syntax.
+ *
+ * To unserialize, use the >> operator.
  */
 class InputArchive
 {
 public:
     /**
-     * Constructor
-     * \param is istream where srialized types will be read
+     * \param is Input stream where serialized types will be read.
      */
     InputArchive(std::istream& is) : is(is) {}
 
     /**
-     * \internal
+     * @brief Actual implementation of the deserialization.
+     *
+     * Reads, from the input stream, the name and the data.
+     *
+     * @param name Type name to read before the data.
+     * @param data Pointer where to save the type data.
+     * @param size Size of the data.
      */
-    void unserializeImpl(const char *name, void *data, int size);
+    void unserializeImpl(const char* name, void* data, int size);
 
 private:
-    InputArchive(const InputArchive&)=delete;
-    InputArchive& operator=(const InputArchive&)=delete;
-    
-    /**
-     * \internal
-     */
+    InputArchive(const InputArchive&) = delete;
+    InputArchive& operator=(const InputArchive&) = delete;
+
     void wrongType(std::streampos pos);
 
     std::istream& is;
 };
 
 /**
- * Unserialize a type
- * \param ia archive where the type has been serialized
- * \param t type to unserialize
- * \throws TscppException if the type found in the stream is not the one
- * expected, or if the stream eof is found
+ * @brief Unserialize a type.
+ *
+ * \param ia Archive where the type has been serialized.
+ * \param t Type to unserialize.
+ * \throws Throws a TscppException if the type found in the stream is not the
+ * one expected, or if the stream eof is found.
  */
-template<typename T>
+template <typename T>
 InputArchive& operator>>(InputArchive& ia, T& t)
 {
-    #ifndef _MIOSIX
-    static_assert(std::is_trivially_copyable<T>::value,"Type is not trivially copyable");
-    #endif
-    ia.unserializeImpl(typeid(t).name(),&t,sizeof(t));
+#ifndef _MIOSIX
+    static_assert(std::is_trivially_copyable<T>::value,
+                  "Type is not trivially copyable");
+#endif
+    ia.unserializeImpl(typeid(t).name(), &t, sizeof(t));
     return ia;
 }
 
 /**
- * The unknown input archive.
+ * @brief The unknown input archive.
+ *
  * This class allows to unserialize types from a stream which have been
  * serialized in an unknown order.
  */
@@ -234,36 +261,41 @@ class UnknownInputArchive
 {
 public:
     /**
-     * Constructor
-     * \param is istream where srialized types will be read
+     * \param is Input stream where serialized types will be read.
      * \param tp TypePool containing the registered types and callbacks that
-     * will be called as types are unserialized
+     * will be called as types are unserialized.
      */
-    UnknownInputArchive(std::istream& is, const TypePoolStream& tp) : is(is), tp(tp) {}
+    UnknownInputArchive(std::istream& is, const TypePoolStream& tp)
+        : is(is), tp(tp)
+    {
+    }
 
     /**
-     * Unserialize one type from the input stream, calling the corresponding
-     * callback in the TypePool
-     * \throws TscppException if the type found in the stream has not been
-     * registred in the TypePool or if the stream eof is found
+     * @brief Unserialize one type from the input stream, calling the
+     * corresponding callback registered in the TypePool.
+     *
+     * \throws Throws a TscppException if the type found in the stream has not
+     * been registred in the TypePool or if the stream eof is found.
      */
     void unserialize();
 
 private:
-    UnknownInputArchive(const UnknownInputArchive&)=delete;
-    UnknownInputArchive& operator=(const UnknownInputArchive&)=delete;
+    UnknownInputArchive(const UnknownInputArchive&) = delete;
+    UnknownInputArchive& operator=(const UnknownInputArchive&) = delete;
 
     std::istream& is;
     const TypePoolStream& tp;
 };
 
 /**
- * Demangle a C++ name. Useful for printing type names in error logs.
- * This function may not be supported in all platforms, in this case it returns
+ * @brief Demangle a C++ name. Useful for printing type names in error logs.
+ *
+ * This function may not be supported on all platforms, in this case it returns
  * the the same string passed as a parameter.
- * \param name name to demangle
- * \return the demangled name
+ *
+ * \param name Name to demangle.
+ * \return The demangled name.
  */
 std::string demangle(const std::string& name);
 
-} // namespace tscpp
+}  // namespace tscpp
