@@ -25,7 +25,7 @@
  *   along with this program; if not, see <http://www.gnu.org/licenses/>   *
  ***************************************************************************/
 
-#include "stream.h"
+#include <tscpp/stream.h>
 #include <memory>
 #if defined(__GNUC__) && !defined(_MIOSIX)
 #include <cxxabi.h>
